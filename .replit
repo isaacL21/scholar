@@ -1,0 +1,19 @@
+run = "bash start.sh"
+entrypoint = "start.sh"
+
+[nix]
+channel = "stable-23_11"
+
+[deployment]
+run = ["bash", "start.sh"]
+
+[[ports]]
+localPort = 3000
+externalPort = 80
+
+[[ports]]
+localPort = 8000
+externalPort = 8000
+
+[env]
+NEXT_TELEMETRY_DISABLED = "1"
