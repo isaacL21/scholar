@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: "Manage your syllabus, notes, and deadlines with an AI tutor powered by Claude.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body className="bg-gray-50 min-h-screen antialiased">{children}</body>
