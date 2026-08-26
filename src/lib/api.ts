@@ -1,6 +1,12 @@
 import axios from "axios";
 
-const api = axios.create({ baseURL: "/api/backend" });
+// On Vercel, call Railway backend directly. Locally, use the Next.js proxy.
+const backendUrl =
+  process.env.NEXT_PUBLIC_BACKEND_URL
+    ? process.env.NEXT_PUBLIC_BACKEND_URL
+    : "/api/backend";
+
+const api = axios.create({ baseURL: backendUrl });
 
 export interface Course {
   id: string;
