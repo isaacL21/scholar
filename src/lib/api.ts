@@ -1,10 +1,15 @@
 import axios from "axios";
 
-// On Vercel, call Railway backend directly. Locally, use the Next.js proxy.
+// NEXT_PUBLIC_ vars are inlined at build time by Next.js.
+// We hardcode the Railway URL as a fallback so it always works on Vercel
+// even if the env var wasn't available during the build.
 const backendUrl =
-  process.env.NEXT_PUBLIC_BACKEND_URL
-    ? process.env.NEXT_PUBLIC_BACKEND_URL
-    : "/api/backend";
+  typeof window !== "undefined"
+    ? (window as Window & { __NEXT_PUBLIC_BACKEND_URL__?: string }).__NEXT_PUBLIC_BACKEND_URL__ ||
+      process.env.NEXT_PUBLIC_BACKEND_URL ||
+      "https://scholar-production-00ac.up.railway.app"
+    : process.env.NEXT_PUBLIC_BACKEND_URL ||
+      "https://scholar-production-00ac.up.railway.app";
 
 const api = axios.create({ baseURL: backendUrl });
 
