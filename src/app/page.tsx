@@ -15,6 +15,7 @@ import Dashboard from "@/components/Dashboard";
 import SyllabusDropzone from "@/components/SyllabusDropzone";
 import NotesDropzone from "@/components/NotesDropzone";
 import AiTutor from "@/components/AiTutor";
+import AddCourseForm from "@/components/AddCourseForm";
 import { getCourses, getDeadlines, getNotes, Course, Deadline, Note } from "@/lib/api";
 
 type Tab = "dashboard" | "syllabus" | "notes" | "tutor";
@@ -124,9 +125,18 @@ export default function Home() {
             <SyllabusDropzone
               onUploaded={(course) => {
                 setCourses((prev) => [...prev, course]);
-                // Re-fetch deadlines since they were added to the store
                 getDeadlines().then(setDeadlines);
               }}
+            />
+
+            <div className="relative flex items-center gap-3 text-xs text-gray-400">
+              <div className="flex-1 border-t border-gray-200" />
+              <span>or add manually</span>
+              <div className="flex-1 border-t border-gray-200" />
+            </div>
+
+            <AddCourseForm
+              onCreated={(course) => setCourses((prev) => [...prev, course])}
             />
 
             {/* Parsed courses preview */}

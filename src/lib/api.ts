@@ -83,6 +83,17 @@ export const askTutor = async (params: {
   return res.data;
 };
 
+export const createCourse = async (params: {
+  course_name: string;
+  course_code: string;
+  instructor?: string;
+  description?: string;
+  topics?: string[];
+}): Promise<{ course: Course }> => {
+  const res = await api.post("/courses/create", params);
+  return res.data;
+};
+
 export const deleteCourse = async (courseId: string): Promise<void> => {
   await api.delete(`/courses/${courseId}`);
 };
