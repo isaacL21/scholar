@@ -37,7 +37,9 @@ export interface Note {
   id: string;
   title: string;
   course_id: string;
+  course_name: string;
   preview: string;
+  breakdown: string;
 }
 
 export const uploadSyllabus = async (file: File): Promise<{ course: Course }> => {

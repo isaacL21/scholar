@@ -16,6 +16,7 @@ import SyllabusDropzone from "@/components/SyllabusDropzone";
 import NotesDropzone from "@/components/NotesDropzone";
 import AiTutor from "@/components/AiTutor";
 import AddCourseForm from "@/components/AddCourseForm";
+import NotesViewer from "@/components/NotesViewer";
 import { getCourses, getDeadlines, getNotes, Course, Deadline, Note } from "@/lib/api";
 
 type Tab = "dashboard" | "syllabus" | "notes" | "tutor";
@@ -184,32 +185,19 @@ export default function Home() {
             <div>
               <h2 className="text-xl font-bold text-gray-900">Notes</h2>
               <p className="text-sm text-gray-500 mt-1">
-                Upload or paste lecture notes. Scholar embeds them so the AI Tutor can answer questions directly from your notes.
+                Upload or paste notes — Claude instantly breaks them down into key concepts, definitions, formulas, and likely exam topics.
               </p>
             </div>
             <NotesDropzone
               courses={courses}
               onUploaded={(note) => setNotes((prev) => [...prev, note])}
             />
-
-            {notes.length > 0 && (
-              <div>
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                  Saved Notes ({notes.length})
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {notes.map((n) => (
-                    <div key={n.id} className="bg-white border border-gray-200 rounded-xl p-4">
-                      <p className="font-medium text-gray-800 text-sm">{n.title}</p>
-                      <p className="text-xs text-gray-400 mt-1 mb-2">
-                        {courses.find((c) => c.id === n.course_id)?.course_code ?? "Unknown course"}
-                      </p>
-                      <p className="text-xs text-gray-500 line-clamp-3 font-mono">{n.preview}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <div className="border-t border-gray-100 pt-4">
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
+                Your Notes {notes.length > 0 && `(${notes.length})`}
+              </h3>
+              <NotesViewer notes={notes} courses={courses} />
+            </div>
           </div>
         )}
 

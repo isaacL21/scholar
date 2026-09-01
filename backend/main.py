@@ -12,7 +12,6 @@ from dotenv import load_dotenv
 
 import anthropic
 import chromadb
-from pypdf import PdfReader
 
 load_dotenv()
 
@@ -35,6 +34,8 @@ DATA_FILE = Path("./data/store.json")
 DATA_FILE.parent.mkdir(exist_ok=True)
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
 def load_store() -> dict:
     if DATA_FILE.exists():
         return json.loads(DATA_FILE.read_text())
@@ -46,9 +47,40 @@ def save_store(data: dict):
 
 
 def extract_pdf_text(file_bytes: bytes) -> str:
+    """Try multiple PDF extraction methods for maximum compatibility."""
     import io
-    reader = PdfReader(io.BytesIO(file_bytes))
-    return "\n".join(page.extract_text() or "" for page in reader.pages)
+
+    # Method 1: pypdf
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(file_bytes))
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        if text.strip():
+            return text
+    except Exception:
+        pass
+
+    # Method 2: pdfminer
+    try:
+        from pdfminer.high_level import extract_text as pdfminer_extract
+        text = pdfminer_extract(io.BytesIO(file_bytes))
+        if text.strip():
+            return text
+    except Exception:
+        pass
+
+    # Method 3: raw text extraction (last resort)
+    try:
+        raw = file_bytes.decode("latin-1", errors="ignore")
+        import re
+        chunks = re.findall(r'\(([^\)]{4,})\)', raw)
+        text = " ".join(chunks)
+        if len(text.strip()) > 100:
+            return text
+    except Exception:
+        pass
+
+    return ""
 
 
 def chunk_text(text: str, size: int = 800, overlap: int = 100) -> list[str]:
@@ -63,8 +95,7 @@ def simple_embed(text: str) -> list[float]:
     dim = 256
     vec = [0.0] * dim
     for i in range(len(text) - 2):
-        trigram = text.lower()[i:i+3]
-        h = int(hashlib.md5(trigram.encode()).hexdigest(), 16)
+        h = int(hashlib.md5(text.lower()[i:i+3].encode()).hexdigest(), 16)
         vec[h % dim] += 1.0
     norm = sum(x * x for x in vec) ** 0.5
     return [x / norm for x in vec] if norm > 0 else vec
@@ -105,6 +136,32 @@ SYLLABUS TEXT:
     return json.loads(raw.strip())
 
 
+def breakdown_note_with_claude(text: str, course_name: str, title: str) -> str:
+    """Claude breaks down a note into structured study content."""
+    prompt = f"""You are Scholar, an AI academic assistant for a student at Ohio State Fisher College of Business.
+
+A student has uploaded notes titled "{title}" for their course "{course_name}".
+
+Break these notes down into a clean, structured study document with:
+- ## Key Concepts (bullet points)
+- ## Definitions (term: definition format)
+- ## Important Formulas or Frameworks (if any)
+- ## Summary (3-5 sentences)
+- ## Likely Exam Topics (bullet list)
+
+Be concise but thorough. Use markdown formatting.
+
+NOTES CONTENT:
+{text[:6000]}"""
+
+    msg = claude.messages.create(
+        model="claude-3-5-sonnet-20241022",
+        max_tokens=2000,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return msg.content[0].text
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -117,12 +174,9 @@ async def upload_syllabus(file: UploadFile = File(...)):
     if not file.filename.endswith(".pdf"):
         raise HTTPException(400, "Only PDF files are supported.")
     raw_bytes = await file.read()
-    try:
-        text = extract_pdf_text(raw_bytes)
-    except Exception as e:
-        raise HTTPException(500, f"PDF extraction failed: {e}")
+    text = extract_pdf_text(raw_bytes)
     if len(text.strip()) < 50:
-        raise HTTPException(422, "Could not extract text — PDF may be a scanned image. Try a text-based PDF.")
+        raise HTTPException(422, "Could not extract text — PDF may be a scanned image. Try copy-pasting the text into Notes tab instead.")
     try:
         parsed = parse_syllabus_with_claude(text)
     except Exception as e:
@@ -188,20 +242,36 @@ async def upload_note(
     course_id: str = Form(...),
 ):
     store = load_store()
+    course_name = next((c["course_name"] for c in store["courses"] if c["id"] == course_id), "Unknown Course")
+
     if file:
         raw_bytes = await file.read()
-        try:
-            content = extract_pdf_text(raw_bytes)
-        except Exception as e:
-            raise HTTPException(500, f"PDF extraction failed: {e}")
+        content = extract_pdf_text(raw_bytes)
+        if not content.strip():
+            raise HTTPException(422, "Could not extract text from PDF.")
     elif text:
         content = text
     else:
         raise HTTPException(400, "Provide a file or text.")
+
+    # Claude breaks down the note into structured study content
+    try:
+        breakdown = breakdown_note_with_claude(content, course_name, title)
+    except Exception as e:
+        breakdown = content  # fallback to raw content if Claude fails
+
     note_id = str(uuid.uuid4())
-    note = {"id": note_id, "title": title, "course_id": course_id, "preview": content[:200]}
+    note = {
+        "id": note_id,
+        "title": title,
+        "course_id": course_id,
+        "course_name": course_name,
+        "preview": content[:200],
+        "breakdown": breakdown,
+    }
     store["notes"].append(note)
     save_store(store)
+
     try:
         chunks = chunk_text(content)
         notes_col.add(
@@ -210,11 +280,9 @@ async def upload_note(
             embeddings=embed(chunks),
             metadatas=[{"note_id": note_id, "course_id": course_id, "title": title} for _ in chunks],
         )
-
-
-        
     except Exception as e:
         raise HTTPException(500, f"Vector storage failed: {e}")
+
     return {"success": True, "note": note}
 
 
@@ -232,6 +300,12 @@ def get_deadlines():
 @app.get("/notes")
 def get_notes():
     return load_store()["notes"]
+
+
+@app.get("/notes/course/{course_id}")
+def get_notes_by_course(course_id: str):
+    store = load_store()
+    return [n for n in store["notes"] if n.get("course_id") == course_id]
 
 
 class TutorRequest(BaseModel):
@@ -255,6 +329,17 @@ def ask_tutor(req: TutorRequest):
         context_chunks.extend(syl_results["documents"][0])
     except Exception:
         pass
+
+    # Also include note breakdowns as context
+    store = load_store()
+    if req.course_id:
+        course_notes = [n for n in store["notes"] if n.get("course_id") == req.course_id]
+    else:
+        course_notes = store["notes"]
+    for n in course_notes[:3]:
+        if n.get("breakdown"):
+            context_chunks.append(f"[Study breakdown for {n['title']}]\n{n['breakdown'][:600]}")
+
     context = "\n\n---\n\n".join(context_chunks) if context_chunks else "No notes uploaded yet."
     mode_instructions = {
         "tutor":      "Answer the student's question clearly and thoroughly using the context. Give examples where helpful.",
