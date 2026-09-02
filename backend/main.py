@@ -169,6 +169,31 @@ def health():
     return {"status": "ok", "api_key_set": bool(os.getenv("ANTHROPIC_API_KEY"))}
 
 
+@app.get("/test-claude")
+def test_claude():
+    """Test which Claude models are accessible with the current API key."""
+    results = {}
+    for model in [
+        "claude-3-haiku-20240307",
+        "claude-3-sonnet-20240229",
+        "claude-3-opus-20240229",
+        "claude-3-5-sonnet-20241022",
+        "claude-3-5-haiku-20241022",
+        "claude-haiku-4-5",
+        "claude-sonnet-4-5",
+    ]:
+        try:
+            msg = claude.messages.create(
+                model=model,
+                max_tokens=10,
+                messages=[{"role": "user", "content": "hi"}],
+            )
+            results[model] = "OK"
+        except Exception as e:
+            results[model] = str(e)[:80]
+    return results
+
+
 @app.post("/syllabi/upload")
 async def upload_syllabus(file: UploadFile = File(...)):
     if not file.filename.endswith(".pdf"):
